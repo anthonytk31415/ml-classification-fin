@@ -1,0 +1,133 @@
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import Dataset, DataLoader
+import numpy as np
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.compose import ColumnTransformer
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+import matplotlib.pyplot as plt
+
+# Define categorical and numerical columns
+categorical_columns = ['job', 'marital', 'education', 'housing', 'loan', 'contact', 'campaign', 'previous', 'poutcome']
+# Assuming all other columns in X are numerical (except the target variable)
+numerical_columns = [col for col in X.columns if col not in categorical_columns]
+
+print("Categorical columns:", categorical_columns)
+print("Numerical columns:", numerical_columns)
+
+# Create preprocessing steps for both numerical and categorical data
+preprocessor = ColumnTransformer(
+    transformers=[
+        ('num', StandardScaler(), numerical_columns),
+        ('cat', OneHotEncoder(drop='first', sparse=False), categorical_columns)
+    ])
+
+# Fit and transform the data
+X_transformed = preprocessor.fit_transform(X)
+
+# Get feature names after transformation
+cat_feature_names = preprocessor.named_transformers_['cat'].get_feature_names_out(categorical_columns)
+feature_names = numerical_columns + list(cat_feature_names)
+print(f"Total number of features after one-hot encoding: {len(feature_names)}")
+
+# Split the transformed data
+X_train, X_test, y_train, y_test = train_test_split(X_transformed, y, test_size=0.2, random_state=42)
+
+# Convert to torch tensors
+X_train = torch.tensor(X_train, dtype=torch.float32)
+X_test = torch.tensor(X_test, dtype=torch.float32)
+y_train = torch.tensor(y_train, dtype=torch.float32).view(-1, 1)
+y_test = torch.tensor(y_test, dtype=torch.float32).view(-1, 1)
+
+# Define the Logistic Regression model with L1 regularization
+class LogisticRegressionL1(nn.Module):
+    def __init__(self, input_dim):
+        super(LogisticRegressionL1, self).__init__()
+        self.linear = nn.Linear(input_dim, 1)
+        
+    def forward(self, x):
+        return torch.sigmoid(self.linear(x))
+
+# L1 regularization function
+def l1_regularization(model):
+    l1_norm = 0
+    for param in model.parameters():
+        l1_norm += torch.sum(torch.abs(param))
+    return l1_norm
+
+# Initialize model, loss function, and optimizer
+input_dim = X_train.shape[1]  # Updated to use the new transformed input dimension
+model = LogisticRegressionL1(input_dim)
+criterion = nn.BCEWithLogitsLoss()
+optimizer = optim.SGD(model.parameters(), lr=0.01)
+
+# Hyperparameters
+num_epochs = 100
+lambda_l1 = 0.01  # L1 regularization strength
+
+# Lists to store loss and accuracy
+performance = {'train_loss': [], 'test_loss': [], 'train_accuracy': [], 'test_accuracy': []}
+
+# Training loop
+for epoch in range(num_epochs):
+    model.train()
+    
+    # Forward pass (train set)
+    outputs_train = model(X_train)
+    loss_train = criterion(outputs_train, y_train)
+    
+    # Apply L1 regularization
+    l1_loss = l1_regularization(model)
+    loss_train += lambda_l1 * l1_loss
+    
+    # Backward pass and optimization
+    optimizer.zero_grad()
+    loss_train.backward()
+    optimizer.step()
+    
+    # Calculate train accuracy
+    with torch.no_grad():
+        predictions_train = (outputs_train > 0.5).float()
+        train_accuracy = (predictions_train == y_train).float().mean()
+        
+        # Calculate test loss and accuracy
+        outputs_test = model(X_test)
+        loss_test = criterion(outputs_test, y_test)
+        predictions_test = (outputs_test > 0.5).float()
+        test_accuracy = (predictions_test == y_test).float().mean()
+    
+    # Store loss and accuracy
+    performance['train_loss'].append(loss_train.item())
+    performance['test_loss'].append(loss_test.item())
+    performance['train_accuracy'].append(train_accuracy.item())
+    performance['test_accuracy'].append(test_accuracy.item())
+
+# Function to plot performance
+def plot_performance(performance):
+    '''
+    Function for plotting training and test losses and accuracies
+    '''
+    plt.style.use('seaborn-v0_8-dark')
+    fig, ax = plt.subplots(1, 2, figsize=(16, 4.5))
+    
+    # Plot loss (train vs test)
+    ax[0].plot(performance['train_loss'], label='Train Loss')
+    ax[0].plot(performance['test_loss'], label='Test Loss')
+    ax[0].set(title="Loss over epochs", xlabel='Epoch', ylabel='Loss')
+    
+    # Plot accuracy (train vs test)
+    ax[1].plot(performance['train_accuracy'], label='Train Accuracy')
+    ax[1].plot(performance['test_accuracy'], label='Test Accuracy')
+    ax[1].set(title="Accuracy over epochs", xlabel='Epoch', ylabel='Accuracy')
+
+    ax[0].legend()
+    ax[1].legend()
+
+    plt.show()
+    plt.style.use('default')
+
+# Plot the performance results
+plot_performance(performance) 
