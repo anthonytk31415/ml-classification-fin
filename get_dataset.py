@@ -10,7 +10,6 @@ from sklearn.metrics import accuracy_score, classification_report
 
 import matplotlib as plt
 
-
 # df = pd.read_csv("dataset/bank-full.csv", sep=';')
 
 # # Convert Categorical Columns to numeric values
@@ -20,8 +19,6 @@ import matplotlib as plt
 
 # X = df.drop(columns=["y"]).to_numpy() 
 # y = df["y"].to_numpy()
-
-
 
 # Load the dataset
 input_df = pd.read_csv("dataset/bank-full.csv", sep=';')
